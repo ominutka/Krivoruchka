@@ -740,12 +740,26 @@
   // --- связь ---------------------------------------------------------------
   function connect(){
     const es=new EventSource(api('/stream?cid='+cid+'&room='+encodeURIComponent(roomCode)));
-    es.onerror=()=>{
-      veilLb.textContent='Связь'; veilBig.textContent='Потеряна';
-      veilSm.textContent='Пытаемся восстановить…';
+
+    // Соединение может ненадолго рваться, особенно на бесплатном хостинге.
+    // Браузер переподключается сам за секунду, поэтому не пугаем человека
+    // сразу: показываем предупреждение, только если связи нет дольше трёх
+    // секунд, и убираем его, как только данные пошли снова.
+    let lostTimer=null, lost=false;
+    function showLost(){
+      lost=true;
+      veilLb.textContent='Связь'; veilBig.textContent='Восстанавливаем';
+      veilSm.textContent='Соединение прервалось. Игра продолжится сама.';
       veil.classList.remove('end'); veil.classList.add('on');
-    };
+    }
+    function alive(){
+      clearTimeout(lostTimer); lostTimer=null;
+      if(lost){ lost=false; if(running) veil.classList.remove('on','end'); }
+    }
+    es.onopen=alive;
+    es.onerror=()=>{ if(!lostTimer && !lost) lostTimer=setTimeout(showLost,3000); };
     es.onmessage=ev=>{
+      alive();
       const m=JSON.parse(ev.data);
       switch(m.type){
         case 'no-room': showEnter('Такой комнаты нет. Проверьте код.'); break;
