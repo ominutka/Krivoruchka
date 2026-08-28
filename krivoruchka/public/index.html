@@ -20,6 +20,9 @@
 
   .left{flex:none;display:flex;flex-direction:column;min-width:0}
   .right{flex:1;display:flex;flex-direction:column;min-height:0}
+  /* До входа в комнату игровой экран не показываем: иначе он мелькает
+     под экраном входа, пока страница выясняет состояние у сервера */
+  body.booting .left, body.booting .right{visibility:hidden}
 
   header{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:10px 4px 8px;flex:none}
   .eyebrow{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
@@ -214,7 +217,7 @@
   }
 </style>
 </head>
-<body>
+<body class="booting">
 
 <div class="left">
   <header>
@@ -283,7 +286,7 @@
   <div class="setupbar" id="setupBar"></div>
 </div>
 
-<div id="enter">
+<div id="enter" class="on">
   <div class="box">
     <h1>Криворучка</h1>
     <p class="lead" id="enterLead">Игра про совместное рисование, в которой управление разорвано
@@ -537,8 +540,11 @@
   });
 
   function refreshBars(){
-    startBtn.disabled = !isLeader || running || (stageName==='lobby' && takenRoles.length<2);
-    startBtn.textContent = running ? 'Идёт раунд' : (stageName==='result' ? 'Ещё раунд' : 'Начать раунд');
+    const notEnough = stageName==='lobby' && takenRoles.length<2;
+    startBtn.disabled = !isLeader || running || notEnough;
+    startBtn.textContent = running ? 'Идёт раунд'
+      : notEnough ? 'Нужен второй игрок'
+      : (stageName==='result' ? 'Ещё раунд' : 'Начать раунд');
     shuffleBtn.disabled = !isLeader || running;
     clearBtn.disabled = !isLeader;
     remodeBtn.disabled = !isLeader || running;
@@ -639,15 +645,19 @@
     info.className='lead';
     info.style.marginTop='10px';
     info.innerHTML = (takenRoles.length<2
-      ? 'Нужно хотя бы двое. Откройте эту же ссылку на других устройствах.'
+      ? '<b>Пока вы один.</b> Игра начнётся, когда подключится хотя бы ещё один человек: '
+        + (EMBEDDED
+            ? 'пусть откроет эту же страницу и введёт код <b>'+(roomCode||'')+'</b>.'
+            : 'отправьте ему ссылку из панели «Комната».')
       : 'На связи: '+takenRoles.length+' из '+count+'. Свободные роли просто не действуют.')
       + (hasKeyboard ? '<br>На компьютере играйте с клавиатуры: мышью две кнопки сразу не нажать. Буквы подписаны на самих кнопках.' : '');
     setupBody.appendChild(info);
 
     if(isLeader){
       const go=document.createElement('button');
-      go.className='act'; go.textContent='Начать раунд';
+      go.className='act';
       go.disabled = takenRoles.length<2;
+      go.textContent = go.disabled ? 'Ждём второго игрока' : 'Начать раунд';
       go.addEventListener('click',()=>post({type:'start'}));
       setupBar.appendChild(go);
     } else {
@@ -800,12 +810,15 @@
   }
   function showEnter(err){
     roomCode=null;
+    document.body.classList.add('booting');
     enter.classList.add('on');
     setup.classList.remove('on');
     enterErr.textContent = err || '';
   }
   function enterRoom(code){
     roomCode=code;
+    document.body.classList.remove('booting');
+    setup.classList.add('on');      // закрываем игровой экран до прихода состояния
     enter.classList.remove('on');
     $('roomCode').textContent=code;
     if(EMBEDDED){
