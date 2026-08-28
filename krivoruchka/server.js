@@ -67,7 +67,8 @@ function newRoom(code){
       frozen:null, frozenUntil:0,
       down:false,
       inp:{left:0,right:0,up:0,down:0,draw:0,erase:0,thin:0,thick:0,slow:0,fast:0,mirror:0},
-      ops:[], nextNoise:0
+      ops:[], nextNoise:0,
+      sentX:-1, sentY:-1, sentW:-1, sentC:'', sentD:-1, sentM:-1, sentS:-1
     }
   };
   rooms.set(code, room);
@@ -242,6 +243,8 @@ function startRound(room){
   G.left = {...LIMITS}; G.stampIx = 0;
   G.shakeUntil = 0; G.boostUntil = 0; G.frozen = null; G.frozenUntil = 0;
   G.down = false; G.ops = [];
+  G.sentX = -1; G.sentY = -1; G.sentW = -1;
+  G.sentC = ''; G.sentD = -1; G.sentM = -1; G.sentS = -1;
   releaseAll(room);
 
   G.running = true; G.stage = 'round';
@@ -330,10 +333,23 @@ function tick(room){
   }
   G.down = drawing || erasing;
 
-  all(room, { type:'t', x:r(G.x), y:r(G.y), w:r(G.width), c:COLORS[G.colorIx],
-              s: Math.max(0, Math.ceil((G.endsAt - now)/1000)),
-              m: G.inp.mirror ? 1 : 0,
-              d: drawing ? 1 : (erasing ? 2 : 0), seg, mseg });
+  // Бесплатные хостинги плохо переносят поток в 30 сообщений в секунду,
+  // поэтому шлём кадр только когда что-то изменилось. Когда карандаш стоит
+  // и никто не рисует, уходит одно сообщение в секунду — ради таймера.
+  const secs = Math.max(0, Math.ceil((G.endsAt - now) / 1000));
+  const mirror = G.inp.mirror ? 1 : 0;
+  const pen = drawing ? 1 : (erasing ? 2 : 0);
+  const moved = r(G.x) !== G.sentX || r(G.y) !== G.sentY;
+  const changed = moved || seg || r(G.width) !== G.sentW ||
+                  COLORS[G.colorIx] !== G.sentC || pen !== G.sentD ||
+                  mirror !== G.sentM || secs !== G.sentS;
+
+  if (changed) {
+    G.sentX = r(G.x); G.sentY = r(G.y); G.sentW = r(G.width);
+    G.sentC = COLORS[G.colorIx]; G.sentD = pen; G.sentM = mirror; G.sentS = secs;
+    all(room, { type:'t', x:G.sentX, y:G.sentY, w:G.sentW, c:G.sentC,
+                s: secs, m: mirror, d: pen, seg, mseg });
+  }
 
   if (now >= G.endsAt) endRound(room);
 }
@@ -447,6 +463,7 @@ const server = http.createServer(async (req, res) => {
 
     res.writeHead(200, { 'Content-Type':'text/event-stream; charset=utf-8',
       'Cache-Control':'no-cache, no-transform', 'Connection':'keep-alive', 'X-Accel-Buffering':'no' });
+    if (res.flushHeaders) res.flushHeaders();
     res.write(': ok\n\n');
 
     if (!room) {
@@ -469,7 +486,7 @@ const server = http.createServer(async (req, res) => {
     write(client, { type:'snapshot', ops:room.G.ops });
     announce(room);
 
-    const ping = setInterval(() => { try { res.write(': ping\n\n'); } catch(e){} }, 25000);
+    const ping = setInterval(() => { try { res.write(': ping\n\n'); } catch(e){} }, 15000);
 
     req.on('close', () => {
       clearInterval(ping);
