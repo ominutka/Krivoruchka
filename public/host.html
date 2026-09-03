@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Криворучка — экран</title>
+<style>
+  :root{
+    --slate:#2B3038; --slate-2:#363C46; --paper:#F6F3EA; --ink:#1A1D22; --muted:#8B93A0;
+    --p1:#E8452B; --p2:#2D9CDB; --p3:#F2C744; --p4:#17B890;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:var(--slate);color:var(--paper);min-height:100vh;
+    font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;
+    display:flex;flex-direction:column;align-items:center;padding:18px 16px 26px;
+  }
+  .wrap{width:100%;max-width:1000px}
+  .topbar{display:flex;align-items:flex-end;justify-content:space-between;gap:16px}
+  .eyebrow{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+  #task{font-family:"Arial Narrow",Arial,sans-serif;font-weight:700;font-size:40px;line-height:1;text-transform:uppercase}
+  #timer{font-family:"Arial Narrow",Arial,sans-serif;font-weight:700;font-size:58px;line-height:.9;font-variant-numeric:tabular-nums}
+  #timer.low{color:var(--p1)}
+
+  .stage{position:relative;margin-top:14px}
+  canvas{display:block;width:100%;height:auto;background:var(--paper);border-radius:3px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+  .overlay{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;
+    gap:14px;background:rgba(43,48,56,.92);border-radius:3px;text-align:center;padding:24px}
+  .overlay.on{display:flex}
+  .overlay .label{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--muted)}
+  .overlay .verdict{font-family:"Arial Narrow",Arial,sans-serif;font-weight:700;font-size:clamp(32px,6vw,62px);line-height:1;text-transform:uppercase}
+  .join{max-width:540px;font-size:15px;line-height:1.6}
+  .join code{background:var(--slate-2);padding:3px 8px;border-radius:3px}
+
+  .players{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px}
+  .player{background:var(--slate-2);border-radius:3px;padding:11px 13px;border-left:4px solid var(--c);
+    opacity:.4;transition:opacity .15s,background .08s}
+  .player.here{opacity:1}
+  .player.active{background:#434B57}
+  .player.reshuffled{animation:pop .5s ease}
+  @keyframes pop{0%{background:var(--c)}100%{background:var(--slate-2)}}
+  .player .role{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--c);font-weight:700;margin-bottom:5px}
+  .player .who{font-size:13px;color:var(--muted)}
+
+  .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;align-items:center}
+  button{font-family:inherit;font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+    background:var(--paper);color:var(--ink);border:0;border-radius:3px;padding:11px 18px;cursor:pointer}
+  button.ghost{background:transparent;color:var(--muted);border:1px solid #4A525F}
+  button:disabled{opacity:.4;cursor:default}
+  button:focus-visible{outline:2px solid var(--p3);outline-offset:2px}
+  .toggle{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);cursor:pointer;user-select:none;margin-left:4px}
+  .toggle input{width:16px;height:16px;accent-color:var(--p3);cursor:pointer}
+  .note{font-size:12px;color:var(--muted);line-height:1.5;margin-top:12px}
+  @media (max-width:760px){ .players{grid-template-columns:repeat(2,1fr)} #task{font-size:26px} #timer{font-size:40px} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <div>
+      <div class="eyebrow">Нарисуйте вместе</div>
+      <div id="task">Ждём игроков</div>
+    </div>
+    <div id="timer">60</div>
+  </div>
+
+  <div class="stage">
+    <canvas id="c" width="1800" height="1000"></canvas>
+    <div class="overlay on" id="overlay">
+      <div class="label" id="ovLabel">Подключение</div>
+      <div class="verdict" id="verdict">Криворучка</div>
+      <div class="join" id="joinInfo"></div>
+    </div>
+  </div>
+
+  <div class="players">
+    <div class="player" id="pl1" style="--c:var(--p1)">
+      <div class="role">1 — влево / вправо</div><div class="who">не подключён</div>
+    </div>
+    <div class="player" id="pl2" style="--c:var(--p2)">
+      <div class="role">2 — вверх / вниз</div><div class="who">не подключён</div>
+    </div>
+    <div class="player" id="pl3" style="--c:var(--p3)">
+      <div class="role">3 — карандаш и ластик</div><div class="who">не подключён</div>
+    </div>
+    <div class="player" id="pl4" style="--c:var(--p4)">
+      <div class="role">4 — толщина и цвет</div><div class="who">не подключён</div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button id="start">Начать раунд</button>
+    <button id="shuffle" class="ghost">Перемешать роли</button>
+    <label class="toggle"><input type="checkbox" id="autoShuffle"> Мешать перед каждым раундом</label>
+    <button id="clear" class="ghost">Стереть</button>
+    <button id="save" class="ghost">Сохранить картинку</button>
+  </div>
+
+  <p class="note">Раунд можно начинать и без полного состава — свободные роли просто не действуют.</p>
+</div>
+
+<script>
+(function(){
+  const cv=document.getElementById('c'), ctx=cv.getContext('2d');
+  const timerEl=document.getElementById('timer'), taskEl=document.getElementById('task');
+  const overlay=document.getElementById('overlay'), verdict=document.getElementById('verdict');
+  const ovLabel=document.getElementById('ovLabel'), joinInfo=document.getElementById('joinInfo');
+  const shuffleBtn=document.getElementById('shuffle'), autoShuffle=document.getElementById('autoShuffle');
+
+  const TASKS=['Кот','Утюг','Тираннозавр','Велосипед','Бабушка','Осьминог','Пожарная машина','Чайник',
+    'Пингвин','Гитара','Замок','Кактус','Вертолёт','Снеговик','Микроволновка','Жираф','Подводная лодка','Ёжик'];
+  const COLORS=['#1A1D22','#E8452B','#2D9CDB','#17B890'];
+  const PAPER='#F6F3EA';
+  const SPEED=340, MIN_W=3, MAX_W=46, ROUND=60, BLOBS=3;
+
+  let x=cv.width/2, y=cv.height/2, width=10, colorIx=0, blobsLeft=BLOBS;
+  let running=false, penWasDown=false, endsAt=0, last=0, currentTask='', connected=0;
+
+  const inp={left:0,right:0,up:0,down:0,draw:0,erase:0,thin:0,thick:0};
+  const panelOf={left:'pl1',right:'pl1',up:'pl2',down:'pl2',draw:'pl3',erase:'pl3',thin:'pl4',thick:'pl4'};
+
+  function post(payload){
+    fetch('/msg',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).catch(()=>{});
+  }
+  function broadcastRound(){
+    post({ch:'player',type:'round',running,task:currentTask,color:COLORS[colorIx],blobsLeft});
+  }
+  function paintPanels(){
+    ['pl1','pl2','pl3','pl4'].forEach(id=>{
+      const on=Object.keys(panelOf).some(k=>inp[k]&&panelOf[k]===id);
+      document.getElementById(id).classList.toggle('active',on);
+    });
+  }
+  function releaseAll(){ for(const k in inp) inp[k]=0; penWasDown=false; paintPanels(); }
+
+  // --- связь ---
+  const es=new EventSource('/stream?ch=host');
+  es.onmessage=ev=>{
+    const m=JSON.parse(ev.data);
+    if(m.type==='roster'){ applyRoster(m.taken); }
+    else if(m.type==='join'){ broadcastRound(); }
+    else if(m.type==='shuffled'){ onShuffled(); }
+    else if(m.type==='input'){ handleInput(m); }
+  };
+  function applyRoster(taken){
+    connected=taken.length;
+    ['1','2','3','4'].forEach(r=>{
+      const el=document.getElementById('pl'+r);
+      const here=taken.includes(r);
+      el.classList.toggle('here',here);
+      el.querySelector('.who').textContent = here ? 'на связи' : 'не подключён';
+      if(!here) Object.keys(panelOf).forEach(k=>{ if(panelOf[k]==='pl'+r) inp[k]=0; });
+    });
+    paintPanels();
+    shuffleBtn.disabled = connected < 2;
+  }
+  function onShuffled(){
+    // После перемешивания старые нажатия недействительны
+    releaseAll();
+    ['pl1','pl2','pl3','pl4'].forEach(id=>{
+      const el=document.getElementById(id);
+      el.classList.remove('reshuffled'); void el.offsetWidth; el.classList.add('reshuffled');
+    });
+  }
+  function handleInput(m){
+    if(m.action==='blob'){ stampBlob(); return; }
+    if(m.action==='color'){ colorIx=(colorIx+1)%COLORS.length; broadcastRound(); return; }
+    if(m.action in inp){ inp[m.action]=m.down?1:0; paintPanels(); }
+  }
+
+  // --- рисование ---
+  function clearPaper(){ ctx.fillStyle=PAPER; ctx.fillRect(0,0,cv.width,cv.height); }
+
+  let ghost=null;
+  function drawCursor(){
+    if(ghost) ctx.putImageData(ghost.data,ghost.x,ghost.y);
+    const r=Math.max(10,width/2+8);
+    const sx=Math.max(0,Math.round(x-r-3)), sy=Math.max(0,Math.round(y-r-3));
+    const w=Math.min(cv.width-sx,Math.round(2*r+6)), h=Math.min(cv.height-sy,Math.round(2*r+6));
+    ghost={x:sx,y:sy,data:ctx.getImageData(sx,sy,w,h)};
+    ctx.strokeStyle = inp.erase ? '#8B93A0' : (inp.draw ? COLORS[colorIx] : 'rgba(26,29,34,.4)');
+    ctx.lineWidth=2; ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.stroke();
+  }
+  function dropCursor(){ if(ghost){ ctx.putImageData(ghost.data,ghost.x,ghost.y); ghost=null; } }
+
+  function stampBlob(){
+    if(!running||blobsLeft<=0) return;
+    blobsLeft--; dropCursor();
+    ctx.fillStyle=COLORS[colorIx]; ctx.beginPath();
+    const R=width*2.4+26;
+    for(let a=0;a<Math.PI*2;a+=Math.PI/9){
+      const rr=R*(.72+Math.random()*.5);
+      const px=x+Math.cos(a)*rr, py=y+Math.sin(a)*rr;
+      a===0?ctx.moveTo(px,py):ctx.lineTo(px,py);
+    }
+    ctx.closePath(); ctx.fill(); drawCursor(); broadcastRound();
+  }
+
+  function frame(now){
+    if(!running) return;
+    const dt=Math.min((now-last)/1000,.05); last=now;
+    dropCursor();
+
+    const dx=inp.right-inp.left, dy=inp.down-inp.up;
+    const px=x, py=y;
+    x=Math.max(0,Math.min(cv.width, x+dx*SPEED*dt));
+    y=Math.max(0,Math.min(cv.height,y+dy*SPEED*dt));
+
+    if(inp.thick) width=Math.min(MAX_W,width+36*dt);
+    if(inp.thin)  width=Math.max(MIN_W,width-36*dt);
+
+    const erasing=!!inp.erase, drawing=!!inp.draw&&!erasing;
+    if(drawing||erasing){
+      ctx.strokeStyle = erasing?PAPER:COLORS[colorIx];
+      ctx.lineWidth = erasing?Math.max(width*2.6,34):width;
+      ctx.lineCap='round'; ctx.lineJoin='round';
+      ctx.beginPath();
+      if(penWasDown){ ctx.moveTo(px,py); ctx.lineTo(x,y); } else { ctx.moveTo(x,y); ctx.lineTo(x,y); }
+      ctx.stroke();
+    }
+    penWasDown=drawing||erasing;
+    drawCursor();
+
+    const left=Math.max(0,Math.ceil((endsAt-now)/1000));
+    timerEl.textContent=left; timerEl.classList.toggle('low',left<=10);
+    if(left<=0){ finish(); return; }
+    requestAnimationFrame(frame);
+  }
+
+  function finish(){
+    running=false; dropCursor();
+    ovLabel.textContent='Время вышло';
+    verdict.textContent='Это должен был быть '+currentTask.toLowerCase();
+    joinInfo.textContent='';
+    overlay.classList.add('on');
+    broadcastRound();
+  }
+
+  function begin(){
+    currentTask=TASKS[Math.floor(Math.random()*TASKS.length)];
+    taskEl.textContent=currentTask;
+    clearPaper();
+    x=cv.width/2; y=cv.height/2; width=10; colorIx=0; blobsLeft=BLOBS;
+    releaseAll(); ghost=null;
+    overlay.classList.remove('on');
+    running=true; last=performance.now(); endsAt=last+ROUND*1000;
+    timerEl.textContent=ROUND;
+    broadcastRound();
+    requestAnimationFrame(frame);
+  }
+
+  function start(){
+    if(autoShuffle.checked && connected>=2){
+      post({type:'shuffle'});
+      // Даём телефонам полсекунды показать новую роль
+      ovLabel.textContent='Роли перемешаны';
+      verdict.textContent='Посмотрите на свой телефон';
+      joinInfo.textContent='';
+      overlay.classList.add('on');
+      setTimeout(begin,1600);
+    } else begin();
+  }
+
+  document.getElementById('start').addEventListener('click',start);
+  shuffleBtn.addEventListener('click',()=>post({type:'shuffle'}));
+  document.getElementById('clear').addEventListener('click',()=>{ dropCursor(); clearPaper(); penWasDown=false; if(running) drawCursor(); });
+  document.getElementById('save').addEventListener('click',()=>{
+    dropCursor();
+    const a=document.createElement('a'); a.download='krivoruchka.png'; a.href=cv.toDataURL('image/png'); a.click();
+    if(running) drawCursor();
+  });
+
+  shuffleBtn.disabled=true;
+  clearPaper();
+  joinInfo.innerHTML='Откройте на телефонах адрес из консоли — он заканчивается на <code>/play.html</code>.';
+})();
+</script>
+</body>
+</html>

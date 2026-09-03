@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Криворучка — пульт</title>
+<style>
+  :root{
+    --slate:#2B3038; --slate-2:#363C46; --paper:#F6F3EA; --ink:#1A1D22; --muted:#8B93A0;
+    --p1:#E8452B; --p2:#2D9CDB; --p3:#F2C744; --p4:#17B890;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overscroll-behavior:none}
+  body{background:var(--slate);color:var(--paper);
+    font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;
+    display:flex;flex-direction:column;touch-action:manipulation;
+    padding:env(safe-area-inset-top) 12px env(safe-area-inset-bottom)}
+
+  header{padding:14px 2px 10px;display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+  .eyebrow{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--muted)}
+  #myRole{font-family:"Arial Narrow",Arial,sans-serif;font-weight:700;font-size:22px;text-transform:uppercase;line-height:1.1}
+  #status{font-size:12px;color:var(--muted);text-align:right}
+  #status b{color:var(--paper);font-weight:700}
+
+  #pick{flex:1;display:flex;flex-direction:column;justify-content:center;gap:10px;padding-bottom:24px}
+  #pick h1{font-family:"Arial Narrow",Arial,sans-serif;font-size:30px;text-transform:uppercase;margin-bottom:2px}
+  .seat{display:flex;align-items:center;gap:12px;width:100%;background:var(--slate-2);border:0;
+    border-left:5px solid var(--c);border-radius:4px;padding:15px 14px;color:var(--paper);
+    font-family:inherit;text-align:left;cursor:pointer}
+  .seat:disabled{opacity:.35}
+  .seat .n{font-family:"Arial Narrow",Arial,sans-serif;font-weight:700;font-size:26px;color:var(--c);min-width:22px}
+  .seat .t{font-size:15px;font-weight:700}
+  .seat .s{font-size:12px;color:var(--muted);margin-top:2px}
+  .seat.any{border-left-color:var(--paper);background:var(--paper);color:var(--ink)}
+  .seat.any .n{color:var(--ink)}
+  .seat.any .s{color:rgba(26,29,34,.6)}
+
+  #pad{flex:1;display:none;flex-direction:column;gap:10px;padding-bottom:14px}
+  #pad.on{display:flex}
+  .row{display:flex;gap:10px;flex:1}
+  .btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+    background:var(--slate-2);border:1px solid #4A525F;border-radius:6px;color:var(--paper);
+    font-family:inherit;font-weight:700;font-size:17px;text-transform:uppercase;letter-spacing:.05em;
+    user-select:none;touch-action:none;cursor:pointer;min-height:64px;padding:10px}
+  .btn .glyph{font-size:30px;line-height:1}
+  .btn .hint{font-size:11px;font-weight:400;letter-spacing:0;text-transform:none;color:var(--muted)}
+  .btn.down{background:var(--c);color:var(--ink);border-color:var(--c)}
+  .btn.down .hint{color:rgba(26,29,34,.7)}
+  .btn:disabled{opacity:.4}
+  .swatch{width:26px;height:26px;border-radius:50%;border:2px solid rgba(246,243,234,.5)}
+  .note{font-size:12px;color:var(--muted);text-align:center;padding:4px 0 8px;line-height:1.5}
+
+  /* экран смены роли */
+  #flash{position:fixed;inset:0;background:var(--slate);display:none;
+    flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:24px;z-index:9}
+  #flash.on{display:flex}
+  #flash .label{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--muted)}
+  #flash .big{font-family:"Arial Narrow",Arial,sans-serif;font-weight:700;font-size:44px;
+    text-transform:uppercase;line-height:1.05;color:var(--c)}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="eyebrow">Криворучка</div>
+    <div id="myRole">Пульт</div>
+  </div>
+  <div id="status">не подключён</div>
+</header>
+
+<div id="pick">
+  <h1>Выберите роль</h1>
+  <button class="seat any" data-role="">
+    <span class="n">?</span><span><span class="t">Любая — пусть решит игра</span><br><span class="s">Дадут свободную роль</span></span>
+  </button>
+  <button class="seat" data-role="1" style="--c:var(--p1)">
+    <span class="n">1</span><span><span class="t">Влево / вправо</span><br><span class="s">Движение по горизонтали</span></span>
+  </button>
+  <button class="seat" data-role="2" style="--c:var(--p2)">
+    <span class="n">2</span><span><span class="t">Вверх / вниз</span><br><span class="s">Движение по вертикали</span></span>
+  </button>
+  <button class="seat" data-role="3" style="--c:var(--p3)">
+    <span class="n">3</span><span><span class="t">Карандаш и ластик</span><br><span class="s">Рисует, стирает, ставит кляксы</span></span>
+  </button>
+  <button class="seat" data-role="4" style="--c:var(--p4)">
+    <span class="n">4</span><span><span class="t">Толщина и цвет</span><br><span class="s">Меняет линию и палитру</span></span>
+  </button>
+</div>
+
+<div id="pad"></div>
+<p class="note" id="padNote"></p>
+
+<div id="flash">
+  <div class="label">Ваша новая роль</div>
+  <div class="big" id="flashRole"></div>
+</div>
+
+<script>
+(function(){
+  const pick=document.getElementById('pick'), pad=document.getElementById('pad');
+  const myRole=document.getElementById('myRole'), statusEl=document.getElementById('status');
+  const padNote=document.getElementById('padNote');
+  const flash=document.getElementById('flash'), flashRole=document.getElementById('flashRole');
+
+  const COLOR={'1':'var(--p1)','2':'var(--p2)','3':'var(--p3)','4':'var(--p4)'};
+  const TITLE={'1':'Влево / вправо','2':'Вверх / вниз','3':'Карандаш и ластик','4':'Толщина и цвет'};
+
+  // Постоянный идентификатор устройства — переживает перезагрузку страницы
+  let cid = sessionStorage.getItem('kr-cid');
+  if(!cid){ cid = Math.random().toString(36).slice(2,10); sessionStorage.setItem('kr-cid',cid); }
+
+  let role=null, blobsLeft=3, running=false;
+
+  function post(payload){
+    fetch('/msg',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).catch(()=>{});
+  }
+  function sendInput(action,down){ post({ch:'host',type:'input',cid,action,down}); }
+  function releaseAll(){
+    pad.querySelectorAll('.btn.down').forEach(b=>{ b.classList.remove('down'); sendInput(b.dataset.action,false); });
+  }
+
+  const LAYOUT={
+    '1':[[{a:'left',g:'←',t:'Влево'},{a:'right',g:'→',t:'Вправо'}]],
+    '2':[[{a:'up',g:'↑',t:'Вверх'}],[{a:'down',g:'↓',t:'Вниз'}]],
+    '3':[[{a:'draw',g:'✎',t:'Рисовать',h:'держите'}],
+         [{a:'erase',g:'⌫',t:'Стереть',h:'держите'},{a:'blob',g:'●',t:'Клякса',h:'3 за раунд',tap:true}]],
+    '4':[[{a:'thin',g:'—',t:'Тоньше',h:'держите'},{a:'thick',g:'▬',t:'Толще',h:'держите'}],
+         [{a:'color',g:'',t:'Сменить цвет',tap:true,swatch:true}]]
+  };
+
+  function buildPad(){
+    pad.innerHTML='';
+    pad.style.setProperty('--c',COLOR[role]);
+    LAYOUT[role].forEach(rowDef=>{
+      const row=document.createElement('div'); row.className='row';
+      rowDef.forEach(def=>{
+        const b=document.createElement('button');
+        b.className='btn'; b.dataset.action=def.a;
+        b.innerHTML=(def.swatch?'<span class="swatch" id="sw"></span>':'<span class="glyph">'+def.g+'</span>')
+          +'<span>'+def.t+'</span>'+(def.h?'<span class="hint">'+def.h+'</span>':'');
+        if(def.tap){
+          b.addEventListener('pointerdown',e=>{
+            e.preventDefault(); if(b.disabled) return;
+            sendInput(def.a,true);
+            b.classList.add('down'); setTimeout(()=>b.classList.remove('down'),120);
+            if(navigator.vibrate) navigator.vibrate(12);
+          });
+        }else{
+          const on=e=>{ e.preventDefault(); b.setPointerCapture&&b.setPointerCapture(e.pointerId); b.classList.add('down'); sendInput(def.a,true); };
+          const off=e=>{ e.preventDefault(); if(!b.classList.contains('down')) return; b.classList.remove('down'); sendInput(def.a,false); };
+          b.addEventListener('pointerdown',on);
+          b.addEventListener('pointerup',off);
+          b.addEventListener('pointercancel',off);
+          b.addEventListener('pointerleave',off);
+        }
+        b.addEventListener('contextmenu',e=>e.preventDefault());
+        row.appendChild(b);
+      });
+      pad.appendChild(row);
+    });
+    pad.classList.add('on');
+    refreshPad();
+  }
+
+  function refreshPad(){
+    if(role!=='3') return;
+    const b=pad.querySelector('[data-action="blob"]');
+    if(!b) return;
+    b.disabled = blobsLeft<=0 || !running;
+    b.querySelector('.hint').textContent = blobsLeft>0 ? blobsLeft+' за раунд' : 'кончились';
+  }
+
+  function setRole(newRole,announce){
+    const changed = role && role!==newRole;
+    if(role) releaseAll();
+    role=newRole;
+    pick.style.display='none';
+    myRole.textContent=TITLE[role];
+    myRole.style.color=COLOR[role];
+    buildPad();
+    padNote.textContent='Кнопки работают на удержание.';
+    if(changed||announce){
+      flash.style.setProperty('--c',COLOR[role]);
+      flashRole.textContent=TITLE[role];
+      flash.classList.add('on');
+      if(navigator.vibrate) navigator.vibrate([25,60,25]);
+      setTimeout(()=>flash.classList.remove('on'),1500);
+    }
+  }
+
+  function connect(wanted){
+    const url='/stream?ch=player&cid='+cid+(wanted?('&role='+wanted):'');
+    const es=new EventSource(url);
+    es.onopen=()=>{ statusEl.innerHTML='<b>на связи</b>'; };
+    es.onerror=()=>{ statusEl.textContent='связь потеряна'; };
+    es.onmessage=ev=>{
+      const m=JSON.parse(ev.data);
+      if(m.type==='role'){ setRole(m.role, !role && !wanted); }
+      else if(m.type==='full'){ statusEl.textContent='все роли заняты'; padNote.textContent='Свободных ролей нет. Подождите, пока кто-нибудь выйдет.'; }
+      else if(m.type==='round'){
+        running=m.running; blobsLeft=m.blobsLeft;
+        statusEl.innerHTML = running ? '<b>'+m.task+'</b>' : 'ждём раунд';
+        const sw=document.getElementById('sw'); if(sw) sw.style.background=m.color;
+        refreshPad();
+      }
+    };
+    addEventListener('blur',releaseAll);
+  }
+
+  document.querySelectorAll('.seat').forEach(b=>{
+    b.addEventListener('click',()=>connect(b.dataset.role||null));
+  });
+
+  fetch('/roster').then(r=>r.json()).then(d=>{
+    d.taken.forEach(r=>{
+      const b=document.querySelector('.seat[data-role="'+r+'"]');
+      if(b){ b.disabled=true; b.querySelector('.s').textContent='уже занято'; }
+    });
+  }).catch(()=>{});
+})();
+</script>
+</body>
+</html>

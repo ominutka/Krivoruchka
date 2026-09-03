@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Криворучка</title>
+<style>
+  :root{
+    --slate:#2B3038; --slate-2:#363C46; --line:#4A525F;
+    --paper:#F6F3EA; --ink:#1A1D22; --muted:#8B93A0;
+    --p1:#E8452B; --p2:#2D9CDB; --p3:#F2C744; --p4:#17B890; --p5:#A56BE8; --p6:#F08A3C;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;
+    -webkit-user-select:none;-moz-user-select:none;user-select:none;-webkit-touch-callout:none}
+  html,body{height:100%;overscroll-behavior:none}
+  body{background:var(--slate);color:var(--paper);
+    font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;
+    display:flex;flex-direction:column;touch-action:manipulation;overflow:hidden;
+    padding:env(safe-area-inset-top) 10px env(safe-area-inset-bottom)}
+
+  .left{flex:none;display:flex;flex-direction:column;min-width:0}
+  .right{flex:1;display:flex;flex-direction:column;min-height:0}
+  /* До входа в комнату игровой экран не показываем: иначе он мелькает
+     под экраном входа, пока страница выясняет состояние у сервера */
+  body.booting .left, body.booting .right{visibility:hidden}
+
+  header{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:10px 4px 8px;flex:none}
+  .eyebrow{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
+  #task{font-family:"Arial Narrow",Arial,sans-serif;font-weight:700;font-size:26px;
+    text-transform:uppercase;line-height:1.05}
+  #timer{font-family:"Arial Narrow",Arial,sans-serif;font-weight:700;font-size:34px;
+    line-height:1;font-variant-numeric:tabular-nums}
+  #timer.low{color:var(--p1)}
+  #myRole{font-size:12px;font-weight:700;margin-top:2px}
+
+  .stage{position:relative;flex:none;border-radius:4px;overflow:hidden;background:var(--paper);
+    box-shadow:0 8px 24px rgba(0,0,0,.32)}
+  .stage canvas{display:block;width:100%;height:100%;position:absolute;inset:0}
+  #cursor{pointer-events:none}
+
+  .veil{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;
+    justify-content:center;background:rgba(43,48,56,.93);text-align:center;padding:16px}
+  .veil.on{display:flex}
+  .veil .card{display:flex;flex-direction:column;align-items:center;gap:8px}
+  .veil .lb{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
+  .veil .big{font-family:"Arial Narrow",Arial,sans-serif;font-weight:700;
+    font-size:clamp(24px,5vw,48px);text-transform:uppercase;line-height:1.05}
+  .veil .sm{font-size:13px;color:var(--muted);max-width:440px;line-height:1.5}
+  .veil.end{background:transparent;justify-content:flex-end;padding:0}
+  .veil.end .card{width:100%;background:rgba(43,48,56,.94);padding:12px 18px 14px;gap:5px}
+  .veil.end .big{font-size:clamp(20px,3vw,38px)}
+  .veil.end .sm{font-size:clamp(13px,1.2vw,17px)}
+
+  /* всплывающее сообщение о помехе */
+  #toast{position:absolute;left:50%;top:14px;transform:translate(-50%,-160%);
+    background:var(--p3);color:var(--ink);font-weight:700;font-size:clamp(14px,1.5vw,20px);
+    padding:10px 18px;border-radius:5px;transition:transform .18s ease;white-space:nowrap;z-index:3}
+  #toast.on{transform:translate(-50%,0)}
+
+  #pad{flex:1;display:flex;flex-direction:column;gap:8px;padding:8px 0;min-height:0}
+  .row{display:flex;gap:8px;flex:1;min-height:0}
+  .btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+    position:relative;
+    background:var(--slate-2);border:1px solid var(--line);border-radius:6px;color:var(--paper);
+    font-family:inherit;font-weight:700;font-size:15px;text-transform:uppercase;letter-spacing:.04em;
+    touch-action:none;cursor:pointer;min-height:52px;padding:6px}
+  .btn .glyph{font-size:clamp(20px,4vh,28px);line-height:1}
+  .btn .hint{font-size:10px;font-weight:400;letter-spacing:0;text-transform:none;color:var(--muted)}
+  .btn .key{position:absolute;top:5px;right:7px;font-size:10px;font-weight:700;
+    letter-spacing:.04em;color:var(--muted);border:1px solid var(--line);
+    border-radius:3px;padding:1px 5px;line-height:1.4}
+  .btn.down .key{color:rgba(26,29,34,.7);border-color:rgba(26,29,34,.3)}
+  .btn.down{background:var(--c);color:var(--ink);border-color:var(--c)}
+  .btn.down .hint{color:rgba(26,29,34,.7)}
+  .btn:disabled{opacity:.4}
+  .btn.frozen{border-color:var(--p3);opacity:.5}
+  .swatch{width:22px;height:22px;border-radius:50%;border:2px solid rgba(246,243,234,.5)}
+
+  .bar{flex:none;display:flex;gap:6px;align-items:center;padding:6px 0 8px;flex-wrap:wrap}
+  button.act{font-family:inherit;font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+    background:var(--paper);color:var(--ink);border:0;border-radius:3px;padding:10px 14px;cursor:pointer}
+  button.act.ghost{background:transparent;color:var(--muted);border:1px solid var(--line)}
+  button.act:disabled{opacity:.4;cursor:default}
+  button:focus-visible{outline:2px solid var(--p3);outline-offset:2px}
+  .spacer{flex:1}
+
+  #sheet{position:fixed;left:0;right:0;bottom:0;background:var(--slate-2);border-top:1px solid var(--line);
+    border-radius:10px 10px 0 0;padding:14px 16px calc(16px + env(safe-area-inset-bottom));
+    transform:translateY(101%);transition:transform .18s ease;z-index:8;max-height:80vh;overflow-y:auto}
+  #sheet.on{transform:translateY(0)}
+  #sheet h2{font-family:"Arial Narrow",Arial,sans-serif;font-size:19px;text-transform:uppercase;margin-bottom:10px}
+  .seatlist{display:grid;gap:6px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:12px}
+  .seat{background:var(--slate);border-radius:3px;padding:9px 11px;border-left:4px solid var(--c);opacity:.4}
+  .seat.here{opacity:1}
+  .seat.me{outline:1px solid var(--line)}
+  .seat .rl{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--c);font-weight:700;line-height:1.3}
+  .seat .wh{font-size:12px;color:var(--muted);margin-top:2px}
+  .hintline{font-size:12px;color:var(--muted);line-height:1.5;margin-top:8px}
+  #scrim{position:fixed;inset:0;background:rgba(26,29,34,.5);display:none;z-index:7}
+  #scrim.on{display:block}
+
+  /* --- экраны настройки --- */
+  #setup{position:fixed;inset:0;background:var(--slate);z-index:10;display:none;
+    flex-direction:column;padding:22px 16px calc(20px + env(safe-area-inset-bottom));overflow-y:auto}
+  #setup.on{display:flex}
+  /* Код комнаты виден на всех экранах настройки: панель «Комната»
+     закрыта этим экраном, и добраться до неё оттуда нельзя */
+  .roombar{flex:none;display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+    background:var(--slate-2);border-radius:5px;padding:10px 14px;margin-bottom:14px;
+    max-width:680px;width:100%;margin-left:auto;margin-right:auto}
+  .roombar .lb{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
+  .roombar .code{font-family:"Arial Narrow",Arial,sans-serif;font-weight:700;
+    font-size:26px;letter-spacing:.2em;line-height:1}
+  .roombar .grow{flex:1}
+  .steps{display:flex;gap:6px;align-items:center;font-size:10px;letter-spacing:.18em;
+    text-transform:uppercase;color:var(--muted);margin-bottom:14px;flex:none;
+    max-width:680px;width:100%;margin-left:auto;margin-right:auto}
+  .steps .st{opacity:.4}
+  .steps .st.on{opacity:1;color:var(--paper)}
+  .steps .sep{opacity:.3}
+  #setupBody{flex:1;display:flex;flex-direction:column;justify-content:center;max-width:560px;
+    width:100%;margin:0 auto;gap:8px}
+  #setupBody h1{font-family:"Arial Narrow",Arial,sans-serif;font-size:28px;text-transform:uppercase;line-height:1.05}
+  #setupBody .lead{font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:8px}
+  .card-btn{display:flex;align-items:flex-start;gap:12px;width:100%;background:var(--slate-2);border:0;
+    border-left:5px solid var(--c);border-radius:4px;padding:13px;color:var(--paper);
+    font-family:inherit;text-align:left;cursor:pointer}
+  .card-btn:disabled{opacity:.4;cursor:default}
+  .card-btn .n{font-family:"Arial Narrow",Arial,sans-serif;font-weight:700;font-size:22px;
+    color:var(--c);min-width:20px;line-height:1.2}
+  .card-btn .t{font-size:15px;font-weight:700}
+  .card-btn .tag{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--c);font-weight:700}
+  .card-btn .s{font-size:12px;color:var(--muted);margin-top:3px;line-height:1.45}
+  .card-btn.any{border-left-color:var(--paper);background:var(--paper);color:var(--ink)}
+  .card-btn.any .n{color:var(--ink)}
+  .card-btn.any .s{color:rgba(26,29,34,.62)}
+  .numrow{display:flex;gap:8px;flex-wrap:wrap}
+  .num{flex:1;min-width:64px;background:var(--slate-2);border:1px solid var(--line);border-radius:4px;
+    color:var(--paper);font-family:"Arial Narrow",Arial,sans-serif;font-weight:700;font-size:30px;
+    padding:14px 6px 10px;cursor:pointer}
+  .num small{display:block;font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;
+    font-size:10px;font-weight:400;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-top:4px}
+  .num.sel{background:var(--paper);color:var(--ink);border-color:var(--paper)}
+  .num.sel small{color:rgba(26,29,34,.6)}
+  .waiting{text-align:center;color:var(--muted);font-size:14px;line-height:1.6;padding:20px 0}
+  .setupbar{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;flex:none;justify-content:center}
+
+  /* --- экран входа --- */
+  #enter{position:fixed;inset:0;background:var(--slate);z-index:12;display:none;
+    flex-direction:column;justify-content:center;gap:10px;padding:24px 16px;overflow-y:auto}
+  #enter.on{display:flex}
+  #enter .box{max-width:460px;width:100%;margin:0 auto;display:flex;flex-direction:column;gap:10px}
+  #enter h1{font-family:"Arial Narrow",Arial,sans-serif;font-size:34px;text-transform:uppercase;line-height:1}
+  #enter .lead{font-size:14px;color:var(--muted);line-height:1.5;margin-bottom:6px}
+  #enter .or{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);
+    text-align:center;margin:8px 0 2px}
+  #enter .big-act{background:var(--paper);color:var(--ink);border:0;border-radius:5px;
+    font-family:inherit;font-size:16px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
+    padding:18px;cursor:pointer}
+  .codebox{display:flex;gap:8px}
+  #codeInput{flex:1;background:var(--slate-2);border:1px solid var(--line);border-radius:5px;
+    color:var(--paper);font-family:"Arial Narrow",Arial,sans-serif;font-size:28px;font-weight:700;
+    letter-spacing:.24em;text-align:center;padding:14px 10px;text-transform:uppercase;
+    -webkit-user-select:text;user-select:text}
+  #codeInput::placeholder{color:var(--line);letter-spacing:.2em}
+  #enter .err{font-size:13px;color:var(--p1);min-height:18px}
+
+  /* --- приглашение --- */
+  .invite{background:var(--slate);border-radius:4px;padding:12px 14px;margin-bottom:12px}
+  .invite .cap{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
+  .invite .code{font-family:"Arial Narrow",Arial,sans-serif;font-weight:700;font-size:34px;
+    letter-spacing:.2em;line-height:1.1;margin:2px 0 6px}
+  .invite .link{font-size:12px;color:var(--muted);word-break:break-all;line-height:1.4;
+    -webkit-user-select:text;user-select:text}
+
+  #flash{position:fixed;inset:0;background:var(--slate);display:none;z-index:11;
+    flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:24px}
+  #flash.on{display:flex}
+  #flash .big{font-family:"Arial Narrow",Arial,sans-serif;font-weight:700;font-size:38px;
+    text-transform:uppercase;line-height:1.05;color:var(--c)}
+  #flash .sub{font-size:13px;color:var(--muted);max-width:320px;line-height:1.5}
+
+  @media (min-width:900px) and (orientation:landscape){
+    body{flex-direction:row;gap:16px;padding:16px;align-items:stretch}
+    .left{flex:1 1 auto;display:flex;flex-direction:column;min-width:0;overflow:hidden}
+    .right{width:360px;flex:0 0 360px;display:flex;flex-direction:column}
+
+    header{padding:6px 4px 12px}
+    .eyebrow{font-size:12px;letter-spacing:.22em}
+    #task{font-size:clamp(34px,3.4vw,60px)}
+    #timer{font-size:clamp(44px,4.4vw,78px)}
+    #myRole{font-size:15px;margin-top:4px}
+
+    .btn{font-size:18px;min-height:74px;gap:6px;border-radius:8px}
+    .btn .glyph{font-size:clamp(26px,3vh,36px)}
+    .btn .hint{font-size:12px}
+    .btn .key{font-size:12px;padding:2px 7px;top:7px;right:9px}
+    .swatch{width:28px;height:28px}
+    #pad{gap:10px;padding:0 0 10px}
+    .row{gap:10px}
+
+    button.act{font-size:14px;padding:13px 18px}
+    .bar{gap:8px;padding:0 0 10px}
+
+    #sheet{position:static;transform:none;background:transparent;border:0;padding:0;
+      max-height:none;border-radius:0;width:360px;flex:0 0 360px;overflow-y:auto}
+    #sheet h2{font-size:24px;margin-bottom:12px}
+    .seatlist{grid-template-columns:1fr;gap:8px;margin-bottom:14px}
+    .seat{padding:12px 14px;border-left-width:5px}
+    .seat .rl{font-size:12px}
+    .seat .wh{font-size:14px;margin-top:3px}
+    .hintline{font-size:13px}
+    #scrim{display:none!important}
+    #sheetBtn{display:none}
+
+    .steps{font-size:12px;margin-bottom:20px}
+    #setupBody{max-width:680px;gap:10px}
+    #setupBody h1{font-size:40px}
+    #setupBody .lead{font-size:15px}
+    .card-btn{padding:16px 18px;gap:14px}
+    .card-btn .n{font-size:26px}
+    .card-btn .t{font-size:18px}
+    .card-btn .tag{font-size:11px}
+    .card-btn .s{font-size:14px}
+    .num{font-size:38px;padding:18px 6px 12px}
+    .num small{font-size:12px}
+  }
+</style>
+</head>
+<body class="booting">
+
+<div class="left">
+  <header>
+    <div>
+      <div class="eyebrow" id="modeTag">Криворучка</div>
+      <div id="task">Ждём начала</div>
+      <div id="myRole"></div>
+    </div>
+    <div id="timer">60</div>
+  </header>
+
+  <div class="stage" id="stage">
+    <canvas id="paper"></canvas>
+    <canvas id="cursor"></canvas>
+    <div id="toast"></div>
+    <div class="veil on" id="veil">
+      <div class="card">
+        <div class="lb" id="veilLb">Пока не начали</div>
+        <div class="big" id="veilBig">Криворучка</div>
+        <div class="sm" id="veilSm"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="right">
+  <div id="pad"></div>
+  <div class="bar">
+    <button class="act" id="startBtn">Начать раунд</button>
+    <button class="act ghost" id="sheetBtn">Игроки</button>
+    <div class="spacer"></div>
+    <button class="act ghost" id="saveBtn">Сохранить</button>
+  </div>
+</div>
+
+<div id="scrim"></div>
+<div id="sheet">
+  <h2>Комната</h2>
+  <div class="invite">
+    <div class="cap">Код комнаты</div>
+    <div class="code" id="roomCode">—</div>
+    <div class="link" id="roomLink"></div>
+  </div>
+  <div class="bar">
+    <button class="act ghost" id="copyBtn">Скопировать ссылку</button>
+    <button class="act ghost" id="leaveBtn">Выйти из комнаты</button>
+  </div>
+  <h2 style="margin-top:14px">Игроки</h2>
+  <div class="seatlist" id="seatlist"></div>
+  <div class="bar">
+    <button class="act ghost" id="shuffleBtn">Перемешать роли</button>
+    <button class="act ghost" id="clearBtn">Очистить холст</button>
+    <button class="act ghost" id="remodeBtn">Сменить режим</button>
+    <button class="act ghost" id="claimBtn">Забрать ведение</button>
+  </div>
+  <p class="hintline" id="sheetHint"></p>
+</div>
+
+<div id="setup">
+  <div class="roombar">
+    <div>
+      <div class="lb">Комната</div>
+      <div class="code" id="setupCode">—</div>
+    </div>
+    <div class="grow"></div>
+    <button class="act" id="setupCopy">Скопировать ссылку</button>
+  </div>
+  <div class="steps">
+    <span class="st" id="stMode">Режим</span><span class="sep">›</span>
+    <span class="st" id="stCount">Игроки</span><span class="sep">›</span>
+    <span class="st" id="stLobby">Роли</span>
+  </div>
+  <div id="setupBody"></div>
+  <div class="setupbar" id="setupBar"></div>
+</div>
+
+<div id="enter" class="on">
+  <div class="box">
+    <h1>Криворучка</h1>
+    <p class="lead" id="enterLead">Игра про совместное рисование, в которой управление разорвано
+      между игроками. Нужны минимум двое и любые устройства.</p>
+    <button class="big-act" id="createBtn">Создать комнату</button>
+    <div class="or">или войти по коду</div>
+    <div class="codebox">
+      <input id="codeInput" maxlength="4" placeholder="КОД" autocomplete="off"
+             autocapitalize="characters" spellcheck="false" inputmode="text">
+      <button class="act" id="joinBtn">Войти</button>
+    </div>
+    <div class="err" id="enterErr"></div>
+  </div>
+</div>
+
+<div id="flash">
+  <div class="lb" style="font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)">Ваша роль</div>
+  <div class="big" id="flashBig"></div>
+  <div class="sub" id="flashSub"></div>
+</div>
+
+<script src="config.js"></script>
+<script src="roles.js"></script>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const stage=$('stage'), paper=$('paper'), cursor=$('cursor');
+  const pctx=paper.getContext('2d'), cctx=cursor.getContext('2d');
+  const taskEl=$('task'), timerEl=$('timer'), myRoleEl=$('myRole'), modeTag=$('modeTag');
+  const veil=$('veil'), veilLb=$('veilLb'), veilBig=$('veilBig'), veilSm=$('veilSm'), toast=$('toast');
+  const pad=$('pad'), sheet=$('sheet'), scrim=$('scrim'), seatlist=$('seatlist'), sheetHint=$('sheetHint');
+  const startBtn=$('startBtn'), shuffleBtn=$('shuffleBtn'), clearBtn=$('clearBtn'),
+        remodeBtn=$('remodeBtn'), claimBtn=$('claimBtn');
+  const setup=$('setup'), setupBody=$('setupBody'), setupBar=$('setupBar'), flash=$('flash');
+
+  const PAPER='#F6F3EA';
+
+  // Клавиатура: у мыши один указатель, двух кнопок сразу не нажать.
+  // Каждое устройство управляет только своей ролью, поэтому клавиши не конфликтуют.
+  const KEYS={
+    left:['KeyA','ArrowLeft'], right:['KeyD','ArrowRight'],
+    up:['KeyW','ArrowUp'], down:['KeyS','ArrowDown'],
+    draw:['Space'], erase:['KeyE'],
+    stamp:['KeyF'], shake:['KeyG'], mirror:['KeyV'],
+    thin:['KeyQ'], thick:['KeyR'], color:['KeyC'],
+    slow:['KeyZ'], fast:['KeyX']
+  };
+  const KEYNAME={ Space:'ПРОБЕЛ', ArrowLeft:'←', ArrowRight:'→', ArrowUp:'↑', ArrowDown:'↓' };
+  const keyLabel = code => KEYNAME[code] || code.replace('Key','');
+  const hasKeyboard = matchMedia('(pointer:fine)').matches;
+
+  let W=1800, H=1000, MODES={};
+  // Если задан внешний сервер, клиент работает как отдельная страница
+  // (itch.io, свой сайт) и обращается к серверу по абсолютному адресу
+  const API=(window.KR_SERVER||'').replace(/\/+$/,'');
+  const EMBEDDED=!!API;
+  const api=path=>API+path;
+
+  let roomCode=null;
+  let cid=sessionStorage.getItem('kr-cid');
+  if(!cid){ cid=Math.random().toString(36).slice(2,10); sessionStorage.setItem('kr-cid',cid); }
+
+  let role=null, count=4, mode='free', stageName='mode', isLeader=false, isNext=false, running=false;
+  let roundSecs=90, secsOptions=[60,90,120,180];
+  let takenRoles=[], leftCounts={}, curColor='#1A1D22', curW=10, cx=900, cy=500, penState=0;
+  let secret=null, seenRole=false, frozenRole=null, mirrorOn=false;
+
+  function post(p){ p.cid=cid; p.room=roomCode;
+    fetch(api('/msg'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)}).catch(()=>{}); }
+  function sendInput(a,down){ post({type:'input',action:a,down}); }
+  function roleDef(){ return role ? KR.roles(count).find(r=>r.id===role) : null; }
+
+  // --- холст ---------------------------------------------------------------
+  let lastFit='';
+  function fitStage(){
+    const wide=matchMedia('(min-width:900px) and (orientation:landscape)').matches;
+    const avail=stage.parentElement.clientWidth;
+    if(avail<40) return;
+    const top=stage.getBoundingClientRect().top;
+    const room=Math.max(140, innerHeight-top-(wide?18:12));
+    const maxH=wide?room:Math.min(innerHeight*0.42,room);
+    let w=avail, h=w*H/W;
+    if(h>maxH){ h=maxH; w=h*W/H; }
+    w=Math.floor(w); h=Math.floor(h);
+    const key=w+'x'+h; if(key===lastFit) return; lastFit=key;
+    stage.style.width=w+'px'; stage.style.height=h+'px';
+    [paper,cursor].forEach(c=>{ c.width=W; c.height=H; });
+    redrawAll();
+  }
+  addEventListener('resize',fitStage);
+  addEventListener('orientationchange',()=>setTimeout(()=>{lastFit='';fitStage();},200));
+  if(window.ResizeObserver){
+    const ro=new ResizeObserver(()=>fitStage());
+    ro.observe(document.querySelector('.left')); ro.observe(document.body);
+  }
+
+  let ops=[];
+  function clearPaper(){ pctx.fillStyle=PAPER; pctx.fillRect(0,0,W,H); }
+  function drawOp(o){
+    if(o.type==='seg'){
+      pctx.strokeStyle=o.c||PAPER; pctx.lineWidth=o.w; pctx.lineCap='round'; pctx.lineJoin='round';
+      pctx.beginPath(); pctx.moveTo(o.a[0],o.a[1]); pctx.lineTo(o.b[0],o.b[1]); pctx.stroke();
+    } else if(o.type==='blob'){
+      pctx.fillStyle=o.c; pctx.beginPath();
+      o.pts.forEach((p,i)=> i?pctx.lineTo(p[0],p[1]):pctx.moveTo(p[0],p[1]));
+      pctx.closePath(); pctx.fill();
+    } else if(o.type==='stamp'){
+      pctx.strokeStyle=o.c; pctx.lineWidth=o.w; pctx.lineJoin='round'; pctx.beginPath();
+      const {x,y,R,kind}=o;
+      if(kind===0) pctx.arc(x,y,R,0,Math.PI*2);
+      else if(kind===1) pctx.rect(x-R,y-R,R*2,R*2);
+      else if(kind===2){ pctx.moveTo(x,y-R); pctx.lineTo(x+R*.92,y+R*.7); pctx.lineTo(x-R*.92,y+R*.7); pctx.closePath(); }
+      else { for(let i=0;i<10;i++){ const rr=i%2?R*.45:R, a=-Math.PI/2+i*Math.PI/5;
+        const px=x+Math.cos(a)*rr, py=y+Math.sin(a)*rr; i?pctx.lineTo(px,py):pctx.moveTo(px,py); } pctx.closePath(); }
+      pctx.stroke();
+    }
+  }
+  function redrawAll(){ clearPaper(); ops.forEach(drawOp); paintCursor(); }
+  function paintCursor(){
+    cctx.clearRect(0,0,W,H);
+    if(!running) return;
+    const r=Math.max(10,curW/2+8);
+    const col = penState===2?'#8B93A0':(penState===1?curColor:'rgba(26,29,34,.38)');
+    cctx.lineWidth=2;
+    cctx.strokeStyle=col;
+    cctx.beginPath(); cctx.arc(cx,cy,r,0,Math.PI*2); cctx.stroke();
+    if(mirrorOn){
+      // ось симметрии и отражённый курсор, чтобы было видно, куда ляжет вторая линия
+      cctx.save();
+      cctx.setLineDash([14,12]); cctx.lineWidth=2;
+      cctx.strokeStyle='rgba(26,29,34,.25)';
+      cctx.beginPath(); cctx.moveTo(W/2,0); cctx.lineTo(W/2,H); cctx.stroke();
+      cctx.restore();
+      cctx.strokeStyle=col; cctx.lineWidth=2;
+      cctx.beginPath(); cctx.arc(W-cx,cy,r,0,Math.PI*2); cctx.stroke();
+    }
+  }
+
+  let toastTimer=null;
+  function showToast(text){
+    toast.textContent=text; toast.classList.add('on');
+    clearTimeout(toastTimer); toastTimer=setTimeout(()=>toast.classList.remove('on'),2200);
+  }
+
+  // --- кнопки роли ---------------------------------------------------------
+  function buildPad(){
+    const def=roleDef();
+    pad.innerHTML='';
+    if(!def){ pad.innerHTML='<div class="row"><div class="btn" style="opacity:.5;cursor:default">Вы наблюдаете</div></div>'; return; }
+    pad.style.setProperty('--c',def.color);
+    def.rows.forEach(rowDef=>{
+      const row=document.createElement('div'); row.className='row';
+      rowDef.forEach(d=>{
+        const b=document.createElement('button');
+        b.className='btn'; b.dataset.action=d.a;
+        if(d.c) b.dataset.counter=d.c;
+        if(d.tap) b.dataset.tap='1';
+        const keyTag = hasKeyboard && KEYS[d.a] ? '<span class="key">'+keyLabel(KEYS[d.a][0])+'</span>' : '';
+        b.innerHTML=keyTag
+          +(d.swatch?'<span class="swatch" id="sw"></span>':'<span class="glyph">'+d.g+'</span>')
+          +'<span>'+d.t+'</span>'+((d.h||d.c)?'<span class="hint">'+(d.h||'')+'</span>':'');
+        if(d.tap){
+          b.addEventListener('pointerdown',e=>{ e.preventDefault(); tapAction(d.a); });
+        }else{
+          const on=e=>{ e.preventDefault(); b.setPointerCapture&&b.setPointerCapture(e.pointerId); holdAction(d.a,true); };
+          const off=e=>{ e.preventDefault(); holdAction(d.a,false); };
+          b.addEventListener('pointerdown',on); b.addEventListener('pointerup',off);
+          b.addEventListener('pointercancel',off); b.addEventListener('pointerleave',off);
+        }
+        b.addEventListener('contextmenu',e=>e.preventDefault());
+        row.appendChild(b);
+      });
+      pad.appendChild(row);
+    });
+    refreshPad();
+  }
+  function btnOf(a){ return pad.querySelector('.btn[data-action="'+a+'"]'); }
+  function tapAction(a){
+    const b=btnOf(a); if(!b||b.disabled) return;
+    sendInput(a,true);
+    b.classList.add('down'); setTimeout(()=>b.classList.remove('down'),120);
+    if(navigator.vibrate) navigator.vibrate(12);
+  }
+  function holdAction(a,down){
+    const b=btnOf(a); if(!b) return;
+    if(down){ if(b.classList.contains('down')) return; b.classList.add('down'); }
+    else { if(!b.classList.contains('down')) return; b.classList.remove('down'); }
+    sendInput(a,down);
+  }
+
+  // Клавиатура работает только для действий своей роли
+  const pressed=new Set();
+  function actionForKey(code){
+    for(const a in KEYS) if(KEYS[a].includes(code) && btnOf(a)) return a;
+    return null;
+  }
+  addEventListener('keydown',e=>{
+    if(e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+    const a=actionForKey(e.code); if(!a) return;
+    e.preventDefault();
+    if(pressed.has(e.code)) return;
+    pressed.add(e.code);
+    btnOf(a).dataset.tap ? tapAction(a) : holdAction(a,true);
+  });
+  addEventListener('keyup',e=>{
+    const a=actionForKey(e.code); if(!a) return;
+    e.preventDefault();
+    pressed.delete(e.code);
+    if(!btnOf(a).dataset.tap) holdAction(a,false);
+  });
+
+  function refreshPad(){
+    pad.querySelectorAll('.btn[data-counter]').forEach(b=>{
+      const n=leftCounts[b.dataset.counter];
+      b.disabled = !running || !(n>0);
+      const h=b.querySelector('.hint');
+      if(h) h.textContent = n===undefined?'':(n>0?'осталось '+n:'кончились');
+    });
+    const froze = frozenRole && frozenRole===role;
+    pad.querySelectorAll('.btn').forEach(b=>b.classList.toggle('frozen',!!froze));
+    const sw=$('sw'); if(sw) sw.style.background=curColor;
+  }
+  function releaseAll(){
+    pressed.clear();
+    pad.querySelectorAll('.btn.down').forEach(b=>{ b.classList.remove('down'); sendInput(b.dataset.action,false); });
+  }
+  addEventListener('blur',releaseAll);
+
+  // --- панель игроков ------------------------------------------------------
+  function buildSeats(){
+    seatlist.innerHTML='';
+    KR.roles(count).forEach(r=>{
+      const el=document.createElement('div');
+      el.className='seat'+(takenRoles.includes(r.id)?' here':'')+(r.id===role?' me':'');
+      el.style.setProperty('--c',r.color);
+      el.innerHTML='<div class="rl">'+r.id+' — '+r.title+'</div><div class="wh">'
+        +(r.id===role?'это вы':(takenRoles.includes(r.id)?'на связи':'свободно'))+'</div>';
+      seatlist.appendChild(el);
+    });
+    fitStage();
+  }
+  function toggleSheet(on){ sheet.classList.toggle('on',on); scrim.classList.toggle('on',on); }
+  $('sheetBtn').addEventListener('click',()=>toggleSheet(!sheet.classList.contains('on')));
+  scrim.addEventListener('click',()=>toggleSheet(false));
+  startBtn.addEventListener('click',()=>post({type: stageName==='result' ? 'again' : 'start'}));
+  shuffleBtn.addEventListener('click',()=>post({type:'shuffle'}));
+  clearBtn.addEventListener('click',()=>post({type:'clear'}));
+  remodeBtn.addEventListener('click',()=>{ toggleSheet(false); post({type:'remode'}); });
+  claimBtn.addEventListener('click',()=>{ toggleSheet(false); post({type:'claim'}); });
+  $('saveBtn').addEventListener('click',()=>{
+    const a=document.createElement('a'); a.download='krivoruchka.png'; a.href=paper.toDataURL('image/png'); a.click();
+  });
+
+  function refreshBars(){
+    const notEnough = stageName==='lobby' && takenRoles.length<2;
+    startBtn.disabled = !isLeader || running || notEnough;
+    startBtn.textContent = running ? 'Идёт раунд'
+      : notEnough ? 'Нужен второй игрок'
+      : (stageName==='result' ? 'Ещё раунд' : 'Начать раунд');
+    shuffleBtn.disabled = !isLeader || running;
+    clearBtn.disabled = !isLeader;
+    remodeBtn.disabled = !isLeader || running;
+    claimBtn.style.display = (!isLeader && isNext) ? '' : 'none';
+    claimBtn.disabled = running;
+    sheetHint.textContent = isLeader
+      ? 'Вы ведущий: режим, состав и начало раунда — на вас.'
+      : (isNext
+        ? 'Ведущий зашёл раньше вас. Вы следующий в очереди — можете забрать ведение себе.'
+        : 'Ведёт тот, кто зашёл первым. Забрать ведение может только следующий за ним.');
+  }
+
+  // --- экраны настройки ----------------------------------------------------
+  function setSteps(){
+    $('stMode').classList.toggle('on',stageName==='mode');
+    $('stCount').classList.toggle('on',stageName==='count');
+    $('stLobby').classList.toggle('on',stageName==='lobby');
+  }
+  function waitingBlock(text){
+    return '<div class="waiting">'+text+'</div>';
+  }
+  function renderSetup(){
+    const inSetup = stageName==='mode'||stageName==='count'||stageName==='lobby';
+    setup.classList.toggle('on',inSetup);
+    if(!inSetup){ lastFit=''; fitStage(); return; }
+    setSteps();
+    setupBody.innerHTML=''; setupBar.innerHTML='';
+
+    if(stageName==='mode') renderMode();
+    else if(stageName==='count') renderCount();
+    else renderLobby();
+  }
+
+  function renderMode(){
+    const h=document.createElement('div');
+    h.innerHTML='<h1>Во что играем</h1><p class="lead">Режимы не смешиваются: в каждом своя интрига.</p>';
+    setupBody.appendChild(h);
+    if(!isLeader){
+      setupBody.insertAdjacentHTML('beforeend', waitingBlock('Ведущий выбирает режим.<br>Подождите пару секунд.'));
+      addClaim();
+      return;
+    }
+    const colors=['--p1','--p2','--p3','--p4'];
+    Object.keys(MODES).forEach((k,i)=>{
+      const m=MODES[k];
+      const b=document.createElement('button');
+      b.className='card-btn'; b.style.setProperty('--c','var('+colors[i%4]+')');
+      b.innerHTML='<span class="n">'+(i+1)+'</span><span><span class="tag">'+m.tag+'</span><br>'
+        +'<span class="t">'+m.name+'</span><div class="s">'+m.desc+'</div></span>';
+      b.addEventListener('click',()=>post({type:'mode',m:k}));
+      setupBody.appendChild(b);
+    });
+  }
+
+  function renderCount(){
+    const m=MODES[mode]||{name:''};
+    const h=document.createElement('div');
+    h.innerHTML='<h1>Сколько нас</h1><p class="lead">Режим: <b>'+m.name+'</b>. '
+      +'Чем больше игроков, тем меньше кнопок у каждого.</p>';
+    setupBody.appendChild(h);
+    if(!isLeader){
+      setupBody.insertAdjacentHTML('beforeend', waitingBlock('Ведущий выбирает состав.'));
+      addClaim();
+      return;
+    }
+    const row=document.createElement('div'); row.className='numrow';
+    for(let n=KR.MIN;n<=KR.MAX;n++){
+      const b=document.createElement('button');
+      b.className='num'+(n===count?' sel':'');
+      b.innerHTML=n+'<small>'+(n===2?'вдвоём':'игроков')+'</small>';
+      b.addEventListener('click',()=>post({type:'count',n}));
+      row.appendChild(b);
+    }
+    setupBody.appendChild(row);
+    addBack();
+  }
+
+  function renderLobby(){
+    const m=MODES[mode]||{name:''};
+    const h=document.createElement('div');
+    h.innerHTML='<h1>Разбираем роли</h1><p class="lead"><b>'+m.name+'</b>, '+count+' игроков. '
+      +'Управление разорвано: ни одна роль не рисует сама по себе.</p>';
+    setupBody.appendChild(h);
+
+    const mine=role;
+    KR.roles(count).forEach(r=>{
+      const b=document.createElement('button');
+      b.className='card-btn'; b.style.setProperty('--c',r.color);
+      const state = r.id===mine ? 'это вы' : (takenRoles.includes(r.id)?'занято':r.subtitle);
+      b.innerHTML='<span class="n">'+r.id+'</span><span><span class="t">'+r.title+'</span>'
+        +'<div class="s">'+state+'</div></span>';
+      b.disabled = takenRoles.includes(r.id);
+      b.addEventListener('click',()=>post({type:'pickRole',role:r.id}));
+      setupBody.appendChild(b);
+    });
+
+    // Длительность раунда: шестидесяти секунд многим мало
+    const tw=document.createElement('div');
+    tw.style.marginTop='12px';
+    tw.innerHTML='<div class="cap" style="font-size:10px;letter-spacing:.2em;'
+      +'text-transform:uppercase;color:var(--muted);margin-bottom:6px">Сколько длится раунд</div>';
+    const trow=document.createElement('div'); trow.className='numrow';
+    secsOptions.forEach(n=>{
+      const b=document.createElement('button');
+      b.className='num'+(n===roundSecs?' sel':'');
+      b.innerHTML=(n>=120? (n/60)+'<small>минуты</small>' : n+'<small>секунд</small>');
+      b.disabled=!isLeader;
+      b.addEventListener('click',()=>post({type:'time',n}));
+      trow.appendChild(b);
+    });
+    tw.appendChild(trow);
+    setupBody.appendChild(tw);
+
+    const info=document.createElement('p');
+    info.className='lead';
+    info.style.marginTop='10px';
+    info.innerHTML = (takenRoles.length<2
+      ? '<b>Пока вы один.</b> Игра начнётся, когда подключится хотя бы ещё один человек: '
+        + (EMBEDDED
+            ? 'пусть откроет эту же страницу и введёт код <b>'+(roomCode||'')+'</b>.'
+            : 'нажмите «Скопировать ссылку» вверху и отправьте её.')
+      : 'На связи: '+takenRoles.length+' из '+count+'. Свободные роли просто не действуют.')
+      + (hasKeyboard ? '<br>На компьютере играйте с клавиатуры: мышью две кнопки сразу не нажать. Буквы подписаны на самих кнопках.' : '');
+    setupBody.appendChild(info);
+
+    if(isLeader){
+      const go=document.createElement('button');
+      go.className='act';
+      go.disabled = takenRoles.length<2;
+      go.textContent = go.disabled ? 'Ждём второго игрока' : 'Начать раунд';
+      go.addEventListener('click',()=>post({type:'start'}));
+      setupBar.appendChild(go);
+    } else {
+      setupBar.insertAdjacentHTML('beforeend','<span class="hintline">Ждём ведущего</span>');
+      addClaim();
+    }
+    addBack();
+  }
+
+  function addBack(){
+    if(!isLeader) return;
+    const b=document.createElement('button');
+    b.className='act ghost'; b.textContent='Назад';
+    b.addEventListener('click',()=>post({type:'back'}));
+    setupBar.appendChild(b);
+  }
+  // На экранах настройки панель игроков закрыта, поэтому ведение забирают отсюда
+  function addClaim(){
+    if(isLeader || !isNext) return;
+    const b=document.createElement('button');
+    b.className='act ghost'; b.textContent='Забрать ведение';
+    b.addEventListener('click',()=>post({type:'claim'}));
+    setupBar.appendChild(b);
+  }
+
+  // --- приём состояния -----------------------------------------------------
+  function showRoleFlash(def){
+    flash.style.setProperty('--c',def.color);
+    $('flashBig').textContent=def.title;
+    $('flashSub').textContent=def.subtitle;
+    flash.classList.add('on');
+    if(navigator.vibrate) navigator.vibrate([25,60,25]);
+    setTimeout(()=>flash.classList.remove('on'),1500);
+  }
+
+  function applyYou(m){
+    const wasRole=role, wasCount=count;
+    role=m.role; count=m.count; isLeader=m.leader; isNext=!!m.next; stageName=m.stage; mode=m.mode;
+    if(m.secs) roundSecs=m.secs;
+    const def=roleDef();
+    myRoleEl.textContent = def ? def.title : 'Наблюдатель';
+    myRoleEl.style.color = def ? def.color : 'var(--muted)';
+    modeTag.textContent = 'Криворучка · ' + ((MODES[mode]||{}).name || '');
+    if(wasRole!==role || wasCount!==count) buildPad();
+    // о смене роли предупреждаем только когда игра уже идёт
+    if(def && seenRole && wasRole && wasRole!==role && stageName==='round') showRoleFlash(def);
+    if(def) seenRole=true;
+    buildSeats(); refreshBars();
+    renderSetup();   // рисуем всегда: при первом заходе смены этапа ещё не было
+  }
+
+  function applyRound(m){
+    running=m.running; leftCounts=m.left||{}; curColor=m.color||curColor; curW=m.width||curW;
+    secret=m.secret||null;
+    if(m.running){
+      if(m.task===null){
+        taskEl.textContent='НЕ ЗНАЕТЕ';
+        taskEl.style.color='var(--muted)';
+      } else {
+        taskEl.textContent=m.task;
+        taskEl.style.color = secret ? 'var(--p3)' : '';
+      }
+      veil.classList.remove('on','end');
+    } else if(stageName!=='result'){
+      taskEl.textContent='Ждём начала'; taskEl.style.color='';
+    }
+    timerEl.textContent=m.secs;
+    timerEl.classList.toggle('low', m.running && m.secs<=10);
+    refreshPad(); refreshBars();
+  }
+
+  function applyResult(m){
+    running=false; mirrorOn=false;
+    cctx.clearRect(0,0,W,H);
+    taskEl.textContent=m.task; taskEl.style.color='';
+    veilLb.textContent='Время вышло. Загадано было';
+    veilBig.textContent=m.task;
+    let sm='';
+    if(m.mode==='mole'){
+      const d=KR.roles(count).find(r=>r.id===m.secretRole);
+      sm='Крот — «'+(d?d.title:'?')+'». Он всё это время рисовал: '+m.altTask.toLowerCase()+'.';
+    } else if(m.mode==='guide'){
+      const d=KR.roles(count).find(r=>r.id===m.secretRole);
+      sm='Слово знал только «'+(d?d.title:'?')+'».';
+    }
+    veilSm.textContent=sm;
+    veil.classList.add('end','on');
+    refreshPad(); refreshBars();
+  }
+
+  // --- связь ---------------------------------------------------------------
+  function connect(){
+    const es=new EventSource(api('/stream?cid='+cid+'&room='+encodeURIComponent(roomCode)));
+
+    // Соединение может ненадолго рваться, особенно на бесплатном хостинге.
+    // Браузер переподключается сам за секунду, поэтому не пугаем человека
+    // сразу: показываем предупреждение, только если связи нет дольше трёх
+    // секунд, и убираем его, как только данные пошли снова.
+    let lostTimer=null, lost=false;
+    function showLost(){
+      lost=true;
+      veilLb.textContent='Связь'; veilBig.textContent='Восстанавливаем';
+      veilSm.textContent='Соединение прервалось. Игра продолжится сама.';
+      veil.classList.remove('end'); veil.classList.add('on');
+    }
+    function alive(){
+      clearTimeout(lostTimer); lostTimer=null;
+      if(lost){ lost=false; if(running) veil.classList.remove('on','end'); }
+    }
+    es.onopen=alive;
+    es.onerror=()=>{ if(!lostTimer && !lost) lostTimer=setTimeout(showLost,3000); };
+    es.onmessage=ev=>{
+      alive();
+      const m=JSON.parse(ev.data);
+      switch(m.type){
+        case 'no-room': showEnter('Такой комнаты нет. Проверьте код.'); break;
+        case 'hello': W=m.w; H=m.h; MODES=m.modes; lastFit=''; fitStage(); break;
+        case 'snapshot': ops=m.ops||[]; redrawAll(); break;
+        case 'clear': ops=[]; redrawAll(); break;
+        case 'seg': case 'blob': case 'stamp': ops.push(m); drawOp(m); break;
+        case 't':
+          cx=m.x; cy=m.y; curW=m.w; curColor=m.c; penState=m.d; mirrorOn=!!m.m;
+          if(m.s!==undefined){ timerEl.textContent=m.s; timerEl.classList.toggle('low', m.s<=10); }
+          if(m.seg){ ops.push(m.seg); drawOp(m.seg); }
+          if(m.mseg){ ops.push(m.mseg); drawOp(m.mseg); }
+          paintCursor(); break;
+        case 'you': applyYou(m); break;
+        case 'roster':
+          takenRoles=m.taken;
+          if(m.secs) roundSecs=m.secs;
+          if(m.secsOptions) secsOptions=m.secsOptions;
+          buildSeats(); refreshBars(); renderSetup(); break;
+        case 'round': applyRound(m); break;
+        case 'result': applyResult(m); break;
+        case 'shuffled': releaseAll(); break;
+        case 'noise':
+          frozenRole = m.kind==='freeze' ? m.role : null;
+          showToast(m.text + (m.kind==='freeze' && m.role===role ? ' — у вас!' : ''));
+          if(m.kind==='freeze'){
+            if(m.role===role && navigator.vibrate) navigator.vibrate([40,40,40]);
+            releaseAll();
+            setTimeout(()=>{ frozenRole=null; refreshPad(); },3000);
+          }
+          refreshPad();
+          break;
+      }
+    };
+  }
+
+  // --- вход в комнату ------------------------------------------------------
+  const enter=$('enter'), codeInput=$('codeInput'), enterErr=$('enterErr');
+
+  function roomLinkFor(code){
+    return location.origin + location.pathname + '?r=' + code;
+  }
+  function showEnter(err){
+    roomCode=null;
+    document.body.classList.add('booting');
+    enter.classList.add('on');
+    setup.classList.remove('on');
+    enterErr.textContent = err || '';
+  }
+  function enterRoom(code){
+    roomCode=code;
+    document.body.classList.remove('booting');
+    setup.classList.add('on');      // закрываем игровой экран до прихода состояния
+    enter.classList.remove('on');
+    $('roomCode').textContent=code;
+    $('setupCode').textContent=code;
+    if(EMBEDDED) $('setupCopy').textContent='Скопировать код';
+    if(EMBEDDED){
+      // На itch.io страница открыта во фрейме — ссылку с кодом не передать,
+      // поэтому зовём друзей кодом
+      $('roomLink').textContent='Пусть остальные откроют эту же страницу и введут код.';
+      $('copyBtn').textContent='Скопировать код';
+    } else {
+      history.replaceState(null,'', '?r='+code);
+      $('roomLink').textContent=roomLinkFor(code);
+    }
+    clearPaper(); fitStage();
+    connect();
+  }
+
+  $('createBtn').addEventListener('click',()=>{
+    fetch(api('/new')).then(r=>r.json()).then(d=>enterRoom(d.room))
+      .catch(()=>showEnter('Сервер не отвечает. Проверьте, запущен ли он.'));
+  });
+  function tryJoin(){
+    const code=(codeInput.value||'').trim().toUpperCase();
+    if(code.length<4){ enterErr.textContent='Код состоит из четырёх букв.'; return; }
+    fetch(api('/roster?room='+encodeURIComponent(code))).then(r=>r.json()).then(d=>{
+      if(d.error) showEnter('Такой комнаты нет. Проверьте код.');
+      else { count=d.count; enterRoom(code); }
+    }).catch(()=>showEnter('Сервер не отвечает.'));
+  }
+  $('joinBtn').addEventListener('click',tryJoin);
+  codeInput.addEventListener('keydown',e=>{ if(e.key==='Enter') tryJoin(); });
+
+  function copyInvite(btn){
+    const link = EMBEDDED ? roomCode : roomLinkFor(roomCode);
+    const done=()=>{ const t=btn.dataset.label || btn.textContent;
+      btn.dataset.label=t; btn.textContent='Скопировано';
+      setTimeout(()=>btn.textContent=t,1500); };
+    if(navigator.clipboard) navigator.clipboard.writeText(link).then(done).catch(done);
+    else done();
+  }
+  $('setupCopy').addEventListener('click',()=>copyInvite($('setupCopy')));
+
+  $('copyBtn').addEventListener('click',()=>{
+    const link = EMBEDDED ? roomCode : roomLinkFor(roomCode);
+    const done=()=>{ const b=$('copyBtn'); const t=b.textContent;
+      b.textContent='Скопировано'; setTimeout(()=>b.textContent=t,1400); };
+    if(navigator.clipboard) navigator.clipboard.writeText(link).then(done).catch(()=>{});
+    else done();
+  });
+  $('leaveBtn').addEventListener('click',()=>{
+    if(EMBEDDED) location.reload(); else location.href = location.pathname;
+  });
+
+  // --- старт ----------------------------------------------------------------
+  clearPaper(); fitStage();
+  veilSm.innerHTML = EMBEDDED
+    ? 'Позовите остальных: пусть откроют эту страницу и введут код комнаты.'
+    : 'Отправьте ссылку на комнату остальным.';
+
+  const fromUrl=(new URLSearchParams(location.search).get('r')||'').toUpperCase();
+  if(fromUrl.length===4){
+    fetch(api('/roster?room='+encodeURIComponent(fromUrl))).then(r=>r.json()).then(d=>{
+      if(d.error) showEnter('Комната ' + fromUrl + ' не найдена — возможно, все вышли.');
+      else { count=d.count; enterRoom(fromUrl); }
+    }).catch(()=>showEnter('Сервер не отвечает.'));
+  } else {
+    showEnter();
+  }
+})();
+</script>
+</body>
+</html>
