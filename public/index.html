@@ -549,7 +549,10 @@
   function toggleSheet(on){ sheet.classList.toggle('on',on); scrim.classList.toggle('on',on); }
   $('sheetBtn').addEventListener('click',()=>toggleSheet(!sheet.classList.contains('on')));
   scrim.addEventListener('click',()=>toggleSheet(false));
-  startBtn.addEventListener('click',()=>post({type: stageName==='result' ? 'again' : 'start'}));
+  startBtn.addEventListener('click',()=>{
+    if(running) post({type:'stop'});
+    else post({type: stageName==='result' ? 'again' : 'start'});
+  });
   shuffleBtn.addEventListener('click',()=>post({type:'shuffle'}));
   clearBtn.addEventListener('click',()=>post({type:'clear'}));
   remodeBtn.addEventListener('click',()=>{ toggleSheet(false); post({type:'remode'}); });
@@ -560,8 +563,10 @@
 
   function refreshBars(){
     const notEnough = stageName==='lobby' && takenRoles.length<2;
-    startBtn.disabled = !isLeader || running || notEnough;
-    startBtn.textContent = running ? 'Идёт раунд'
+    // Во время раунда кнопка не блокируется: ведущий может закончить сам,
+    // это особенно важно в режиме без ограничения времени
+    startBtn.disabled = !isLeader || notEnough;
+    startBtn.textContent = running ? 'Закончить раунд'
       : notEnough ? 'Нужен второй игрок'
       : (stageName==='result' ? 'Ещё раунд' : 'Начать раунд');
     shuffleBtn.disabled = !isLeader || running;
@@ -669,7 +674,8 @@
     secsOptions.forEach(n=>{
       const b=document.createElement('button');
       b.className='num'+(n===roundSecs?' sel':'');
-      b.innerHTML=(n>=120? (n/60)+'<small>минуты</small>' : n+'<small>секунд</small>');
+      b.innerHTML = n===0 ? '&infin;<small>неогранич.</small>'
+        : (n>=120 ? (n/60)+'<small>минуты</small>' : n+'<small>секунд</small>');
       b.disabled=!isLeader;
       b.addEventListener('click',()=>post({type:'time',n}));
       trow.appendChild(b);
@@ -732,7 +738,7 @@
   function applyYou(m){
     const wasRole=role, wasCount=count;
     role=m.role; count=m.count; isLeader=m.leader; isNext=!!m.next; stageName=m.stage; mode=m.mode;
-    if(m.secs) roundSecs=m.secs;
+    if(m.secs!==undefined) roundSecs=m.secs;
     const def=roleDef();
     myRoleEl.textContent = def ? def.title : 'Наблюдатель';
     myRoleEl.style.color = def ? def.color : 'var(--muted)';
@@ -750,11 +756,24 @@
     secret=m.secret||null;
     if(m.running){
       if(m.task===null){
-        taskEl.textContent='НЕ ЗНАЕТЕ';
+        // «Проводник»: слово знает и командует один, остальные молчат
+        taskEl.textContent='СЛУШАЙТЕ ПРОВОДНИКА';
         taskEl.style.color='var(--muted)';
       } else {
         taskEl.textContent=m.task;
         taskEl.style.color = secret ? 'var(--p3)' : '';
+      }
+      // Подпись под ролью объясняет, кто сейчас имеет право говорить
+      const def0=roleDef();
+      if(secret==='guide'){
+        myRoleEl.textContent='Проводник — говорите только вы';
+        myRoleEl.style.color='var(--p3)';
+      } else if(mode==='guide' && def0){
+        myRoleEl.textContent=def0.title+' — молчите';
+        myRoleEl.style.color=def0.color;
+      } else if(def0){
+        myRoleEl.textContent=def0.title;
+        myRoleEl.style.color=def0.color;
       }
       veil.classList.remove('on','end');
     } else if(stageName!=='result'){
@@ -777,7 +796,7 @@
       sm='Крот — «'+(d?d.title:'?')+'». Он всё это время рисовал: '+m.altTask.toLowerCase()+'.';
     } else if(m.mode==='guide'){
       const d=KR.roles(count).find(r=>r.id===m.secretRole);
-      sm='Слово знал только «'+(d?d.title:'?')+'».';
+      sm='Проводником был «'+(d?d.title:'?')+'» — только он знал слово и мог говорить.';
     }
     veilSm.textContent=sm;
     veil.classList.add('end','on');
@@ -816,14 +835,15 @@
         case 'seg': case 'blob': case 'stamp': ops.push(m); drawOp(m); break;
         case 't':
           cx=m.x; cy=m.y; curW=m.w; curColor=m.c; penState=m.d; mirrorOn=!!m.m;
-          if(m.s!==undefined){ timerEl.textContent=m.s; timerEl.classList.toggle('low', m.s<=10); }
+          if(m.s===null){ timerEl.textContent='\u221e'; timerEl.classList.remove('low'); }
+          else if(m.s!==undefined){ timerEl.textContent=m.s; timerEl.classList.toggle('low', m.s<=10); }
           if(m.seg){ ops.push(m.seg); drawOp(m.seg); }
           if(m.mseg){ ops.push(m.mseg); drawOp(m.mseg); }
           paintCursor(); break;
         case 'you': applyYou(m); break;
         case 'roster':
           takenRoles=m.taken;
-          if(m.secs) roundSecs=m.secs;
+          if(m.secs!==undefined) roundSecs=m.secs;
           if(m.secsOptions) secsOptions=m.secsOptions;
           buildSeats(); refreshBars(); renderSetup(); break;
         case 'round': applyRound(m); break;
