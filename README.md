@@ -214,6 +214,7 @@ node tests/bootest.js      первый экран: нет мелькания, �
 node tests/timetest.js     выбор длительности раунда
 node tests/guidetest.js    «Проводник»: кто видит слово и кто говорит
 node tests/infinitetest.js режим без ограничения времени
+node tests/uiinfinitetest.js  то же, но кликами в браузере — тут нашёлся баг
 ```
 
 Четвёртый тест проверяет интерфейс целиком, открывая страницу в
