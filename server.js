@@ -16,7 +16,7 @@ const W = 1800, H = 1000;
 const TASKS = ['Кот','Утюг','Тираннозавр','Велосипед','Бабушка','Осьминог','Пожарная машина','Чайник',
   'Пингвин','Гитара','Замок','Кактус','Вертолёт','Снеговик','Микроволновка','Жираф','Подводная лодка','Ёжик'];
 const COLORS = ['#1A1D22','#E8452B','#2D9CDB','#17B890'];
-const ROUND_OPTIONS = [60, 90, 120, 180];   // на выбор ведущему
+const ROUND_OPTIONS = [60, 90, 120, 180, 0];  // 0 = без ограничения времени
 const ROUND_S = 90;                         // по умолчанию
 const TICK_MS = 33;
 const SPEED = 340, SLOW_K = 0.38, FAST_K = 2.2;
@@ -141,7 +141,9 @@ function roundFor(room, c){
   return { type:'round', running:G.running, stage:G.stage, mode:G.mode,
            task: taskFor(room, c.cid),
            secret: (role && role === G.secretRole) ? G.mode : null,
-           secs: G.running ? Math.max(0, Math.ceil((G.endsAt - Date.now())/1000)) : room.roundSecs,
+           secs: G.running
+                   ? (Number.isFinite(G.endsAt) ? Math.max(0, Math.ceil((G.endsAt - Date.now())/1000)) : null)
+                   : room.roundSecs,
            color: COLORS[G.colorIx], left: G.left, width: G.width };
 }
 function tellYou(room, c){
@@ -261,7 +263,8 @@ function startRound(room){
   releaseAll(room);
 
   G.running = true; G.stage = 'round';
-  G.endsAt = Date.now() + room.roundSecs * 1000;
+  // 0 значит «без ограничения»: раунд идёт, пока ведущий не остановит сам
+  G.endsAt = room.roundSecs > 0 ? Date.now() + room.roundSecs * 1000 : Infinity;
   G.nextNoise = Date.now() + NOISE_MIN + Math.random() * (NOISE_MAX - NOISE_MIN);
 
   all(room, { type:'clear' });
@@ -349,7 +352,7 @@ function tick(room){
   // Бесплатные хостинги плохо переносят поток в 30 сообщений в секунду,
   // поэтому шлём кадр только когда что-то изменилось. Когда карандаш стоит
   // и никто не рисует, уходит одно сообщение в секунду — ради таймера.
-  const secs = Math.max(0, Math.ceil((G.endsAt - now) / 1000));
+  const secs = Number.isFinite(G.endsAt) ? Math.max(0, Math.ceil((G.endsAt - now) / 1000)) : null;
   const mirror = G.inp.mirror ? 1 : 0;
   const pen = drawing ? 1 : (erasing ? 2 : 0);
   const moved = r(G.x) !== G.sentX || r(G.y) !== G.sentY;
@@ -364,7 +367,7 @@ function tick(room){
                 s: secs, m: mirror, d: pen, seg, mseg });
   }
 
-  if (now >= G.endsAt) endRound(room);
+  if (Number.isFinite(G.endsAt) && now >= G.endsAt) endRound(room);
 }
 
 function spend(room, key){
